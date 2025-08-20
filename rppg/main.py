@@ -187,12 +187,14 @@ class Model:
             f, state, meta = load_EfficientPhys_pure()
         self.__load(f, state, meta)
     
-    def __load(self, func, state, meta, face_detect_per_n=1):
+    def __load(self, func, state, meta, face_detect_per_n=1, face_detection_timeout=1.0):
         self.state = state 
         self.meta = meta 
         self.fps = meta['fps'] 
         self.input = meta['input'] 
         self.detect_per_n = face_detect_per_n
+        self.face_detection_timeout = face_detection_timeout  # 人脸检测超时时间（秒）
+        self.last_face_detection_time = None  # 最后一次检测到人脸的时间
         self.call = func 
         self.run = None
         self.frame = None
@@ -345,6 +347,14 @@ class Model:
                 box = r.detections[0].bounding_box
                 box = np.array([(box.origin_y-round(box.height*0.2), box.origin_y+round(box.height*0.9)),(box.origin_x, box.width+box.origin_x)])
                 box[box<0] = 0
+                self.last_face_detection_time = ts  # 更新最后检测到人脸的时间
+        
+        # 检查人脸检测是否超时
+        if self.last_face_detection_time is not None and (ts - self.last_face_detection_time) > self.face_detection_timeout:
+            self.box = None  # 清除检测框
+            self.boxkf = None  # 重置卡尔曼滤波器
+            self.last_face_detection_time = None  # 重置时间
+        
         if box is not None:
             if self.boxkf is None:
                 self.boxkf = [KalmanFilter1D(0.01,0.5,i,1) for i in box.reshape(-1)]
